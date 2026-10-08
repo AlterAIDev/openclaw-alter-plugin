@@ -1,0 +1,88 @@
+{
+  "name": "@alter-ai/openclaw-plugin",
+  "version": "0.6.0",
+  "description": "Multi-user identity, OAuth grants, HITL approvals, and per-user audit for OpenClaw deployments — backed by Alter Vault.",
+  "license": "MIT",
+  "author": "Alter AI <oss@alterauth.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AlterAIDev/openclaw-alter-plugin.git"
+  },
+  "homepage": "https://github.com/AlterAIDev/openclaw-alter-plugin#readme",
+  "bugs": {
+    "url": "https://github.com/AlterAIDev/openclaw-alter-plugin/issues"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src/skills",
+    "openclaw.plugin.json",
+    "README.md",
+    "OPERATOR_SETUP.md",
+    "SECURITY.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "pnpm run clean && pnpm run typecheck && pnpm run test && pnpm run build"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.5.0"
+  },
+  "dependencies": {
+    "@alter-ai/alter-sdk": "^0.27.0",
+    "typebox": "^1.1.38"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "openclaw": "2026.6.11",
+    "typescript": "^5.7.0",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.3"
+  },
+  "openclaw": {
+    "extensions": [
+      "./dist/index.js"
+    ]
+  },
+  "keywords": [
+    "openclaw",
+    "openclaw-plugin",
+    "alter",
+    "alter-vault",
+    "oauth",
+    "identity",
+    "hitl"
+  ],
+  "pnpm": {
+    "overrides": {
+      "@hono/node-server": "^1.19.15",
+      "@modelcontextprotocol/sdk": "^1.31.0",
+      "body-parser": "^2.3.0",
+      "fast-uri": "^3.1.8",
+      "hono": "^4.13.7",
+      "ip-address": "^10.7.1",
+      "protobufjs": "^7.6.5",
+      "proxy-addr": "^2.0.8",
+      "qs": "^6.16.0",
+      "tar": "^7.5.21",
+      "undici": "^8.10.2"
+    }
+  }
+}

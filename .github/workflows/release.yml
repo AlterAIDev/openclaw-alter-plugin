@@ -1,0 +1,105 @@
+name: release
+
+# Tags and publishes a release when main carries a package.json version that
+# has no tag yet. Releases arrive as `release: vX.Y.Z` pull requests, so
+# merging one is what triggers this; every other push to main is a no-op.
+# Running it by hand (workflow_dispatch) publishes the current version's
+# existing tag to npm, for when publishing is switched on after the fact.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  tag:
+    name: tag + GitHub release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      released: ${{ steps.check.outputs.released }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: check
+        name: Is this version already tagged?
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/v${version}" > /dev/null; then
+            echo "v${version} is already tagged; nothing to release."
+            echo "released=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "released=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Release notes from CHANGELOG.md
+        if: steps.check.outputs.released == 'true'
+        env:
+          VERSION: ${{ steps.check.outputs.version }}
+        run: |
+          awk -v v="$VERSION" '
+            /^## / { if (found) exit; if ($2 == v) { found = 1; next } }
+            found { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          if ! grep -q '[^[:space:]]' "$RUNNER_TEMP/notes.md"; then
+            echo "::error::CHANGELOG.md has no '## ${VERSION}' section"
+            exit 1
+          fi
+
+      - name: Tag and create the GitHub release
+        if: steps.check.outputs.released == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.check.outputs.version }}
+        run: |
+          gh release create "v${VERSION}" \
+            --target "$GITHUB_SHA" \
+            --title "v${VERSION}" \
+            --notes-file "$RUNNER_TEMP/notes.md"
+
+  publish:
+    name: npm publish
+    needs: tag
+    # Off until npm publishing is set up: set the repository variable
+    # NPM_PUBLISH to "true" and add an NPM_TOKEN secret to turn it on.
+    if: >-
+      vars.NPM_PUBLISH == 'true' &&
+      (needs.tag.outputs.released == 'true' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # npm provenance
+    steps:
+      # The tag, not main: publish exactly what was released.
+      - uses: actions/checkout@v4
+        with:
+          ref: v${{ needs.tag.outputs.version }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - run: pnpm install --frozen-lockfile
+
+      # prepublishOnly runs clean + typecheck + test + build first.
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -1,0 +1,124 @@
+{
+  "id": "alter",
+  "name": "Alter Vault",
+  "description": "Multi-user identity, OAuth grants, HITL approvals, and per-user audit for OpenClaw deployments \u2014 backed by Alter Vault.",
+  "activation": {
+    "onStartup": true
+  },
+  "skills": [
+    "src/skills/alter-accounts",
+    "src/skills/alter-gmail",
+    "src/skills/alter-gcal",
+    "src/skills/alter-drive",
+    "src/skills/alter-notion",
+    "src/skills/alter-slack",
+    "src/skills/alter-github",
+    "src/skills/alter-linear",
+    "src/skills/alter-calendly",
+    "src/skills/alter-x",
+    "src/skills/alter-memory"
+  ],
+  "contracts": {
+    "tools": [
+      "alter_gmail_search",
+      "alter_gmail_get_message",
+      "alter_gmail_send",
+      "alter_gcal_list_events",
+      "alter_gcal_create_event",
+      "alter_drive_search",
+      "alter_drive_get_file",
+      "alter_notion_search",
+      "alter_notion_create_page",
+      "alter_slack_search",
+      "alter_slack_post_message",
+      "alter_github_search_issues",
+      "alter_github_create_issue",
+      "alter_github_create_comment",
+      "alter_linear_search_issues",
+      "alter_linear_create_issue",
+      "alter_calendly_get_current_user",
+      "alter_calendly_list_event_types",
+      "alter_calendly_list_scheduled_events",
+      "alter_calendly_list_event_invitees",
+      "alter_calendly_create_scheduling_link",
+      "alter_calendly_cancel_event",
+      "alter_linkedin_get_current_user",
+      "alter_linkedin_list_posts",
+      "alter_linkedin_share_post",
+      "alter_x_get_current_user",
+      "alter_x_post_tweet",
+      "alter_x_list_user_tweets",
+      "alter_web_search",
+      "alter_memory_remember",
+      "alter_memory_recall",
+      "alter_memory_forget"
+    ]
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "agentApiKeyEnv": {
+        "type": "string",
+        "default": "OPENCLAW_ALTER_AGENT_API_KEY",
+        "description": "Name of the env var holding the agent API key (alter_ak_\u2026; legacy alter_key_\u2026). The plugin reads process.env[agentApiKeyEnv] at boot. The KEY itself is NEVER stored in plugin config \u2014 that would put it in `openclaw plugins config` output."
+      },
+      "appApiKeyEnv": {
+        "type": "string",
+        "default": "OPENCLAW_ALTER_APP_API_KEY",
+        "description": "Name of the env var holding the app API key. Used for end-user sign-in, listGrants, and revokeGrant via the App SDK chokepoint proxy."
+      },
+      "stateHmacSecretEnv": {
+        "type": "string",
+        "default": "OPENCLAW_ALTER_STATE_HMAC_SECRET",
+        "description": "Name of the env var holding a random 64-hex string used to HMAC-sign the Connect state parameter."
+      },
+      "dbEncryptionKeyEnv": {
+        "type": "string",
+        "default": "OPENCLAW_ALTER_DB_KEY",
+        "description": "Name of the env var holding the AES-256-GCM key (64 hex chars = 32 bytes) for at-rest JWT encryption. Validated for length at startup. Rotated via `openclaw alter db-rotate-key`."
+      },
+      "baseUrl": {
+        "type": "string",
+        "format": "uri",
+        "pattern": "^https://",
+        "default": "https://backend.alterauth.com",
+        "description": "Alter API base URL."
+      },
+      "walletBaseUrl": {
+        "type": "string",
+        "format": "uri",
+        "pattern": "^https://",
+        "default": "https://wallet.alterauth.com",
+        "description": "Alter Wallet base URL \u2014 surfaced via /alter wallet."
+      },
+      "publicBaseUrl": {
+        "type": "string",
+        "format": "uri",
+        "pattern": "^https://",
+        "description": "Single public URL for the OpenClaw deployment (e.g. https://openclaw.example.com). The plugin mounts /alter/connect/cb under this. MUST be registered as the allowed Connect return URL in your Alter app."
+      },
+      "channelHashSalt": {
+        "type": "string",
+        "minLength": 16,
+        "description": "Per-deployment random string mixed into channel_user_id hashes used in logs (`sha256(salt + ':' + channel_user_id)[:16]`) so the log hashes aren't a globally-shared rainbow-table target. 32+ random hex chars recommended."
+      },
+      "rateLimitInputTokensPerDay": {
+        "type": "integer",
+        "minimum": 1000,
+        "default": 200000,
+        "description": "Per-user daily cap on LLM input tokens. Tool calls refuse when exceeded. Counter increments post-call (per-day caps tolerate the burst; there is no per-minute cap)."
+      },
+      "rateLimitOutputTokensPerDay": {
+        "type": "integer",
+        "minimum": 1000,
+        "default": 50000,
+        "description": "Per-user daily cap on LLM output tokens."
+      }
+    },
+    "required": [
+      "publicBaseUrl",
+      "channelHashSalt"
+    ]
+  }
+}

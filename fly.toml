@@ -1,0 +1,59 @@
+# Fly.io app config for the OpenClaw gateway + @alter-ai/openclaw-plugin.
+#
+# CHANGE `app` to a unique name before `fly deploy`. Run from the
+# plugin root (where this fly.toml lives):
+#
+#   cd openclaw-alter-plugin
+#   fly deploy
+#
+# `fly deploy` picks up ./fly.toml automatically; the Dockerfile path
+# below is relative to the build context (= the plugin root, where
+# package.json, src/, deploy/ live).
+#
+# All secrets are injected via `fly secrets set` — none of the
+# placeholder names below carry sensitive defaults.
+
+app = "openclaw-gateway"   # globally unique — pick your own before `fly deploy`
+primary_region = "iad"          # Fly region; pick one close to you
+
+[build]
+  dockerfile = "deploy/fly/Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  OPENCLAW_STATE_DIR = "/data"
+  NODE_OPTIONS = "--max-old-space-size=1536"
+  # The plugin's `publicBaseUrl` is computed from FLY_APP_NAME in the
+  # entrypoint. Set PUBLIC_BASE_URL here only if you've allocated a
+  # custom domain that differs from <app>.fly.dev.
+  # PUBLIC_BASE_URL = "https://openclaw.example.com"
+
+[processes]
+  app = "/entrypoint.sh"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  # `fly deploy` waits for the gateway to answer before it reports success.
+  # A boot that has to install plugins takes about a minute before anything
+  # listens on :3000; the grace period is Fly's maximum (1m). The timeout is
+  # generous because a CPU-throttled gateway can stall for several seconds.
+  [[http_service.checks]]
+    grace_period = "1m"
+    interval = "30s"
+    timeout = "10s"
+    method = "GET"
+    path = "/healthz"
+
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "2048mb"
+
+[mounts]
+  source = "openclaw_data"
+  destination = "/data"

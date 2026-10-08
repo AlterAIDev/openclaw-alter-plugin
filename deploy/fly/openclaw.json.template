@@ -1,0 +1,63 @@
+{
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "openai/gpt-5.5",
+        "fallbacks": ["openai/gpt-5.4"]
+      },
+      "maxConcurrent": 4,
+      "workspace": "/data/workspace"
+    },
+    "list": [
+      { "id": "main", "default": true }
+    ]
+  },
+  "auth": {
+    "profiles": {}
+  },
+  "bindings": [
+    { "agentId": "main", "match": { "channel": "slack" } }
+  ],
+  "session": {
+    "dmScope": "per-channel-peer"
+  },
+  "channels": {
+    "slack": {
+      "enabled": true,
+      "mode": "socket",
+      "dmPolicy": "open",
+      "allowFrom": ["*"],
+      "groupPolicy": "open",
+      "slashCommand": { "enabled": true, "name": "alter" }
+    }
+  },
+  "commands": {
+    "allowFrom": { "slack": ["*"], "default": ["*"] }
+  },
+  "tools": {
+    "alsoAllow": "__ALTER_TOOLS_ALLOW__"
+  },
+  "gateway": {
+    "mode": "local",
+    "bind": "auto",
+    "controlUi": {
+      "allowedOrigins": [
+        "__PUBLIC_BASE_URL__",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000"
+      ]
+    }
+  },
+  "plugins": {
+    "entries": {
+      "alter": {
+        "enabled": true,
+        "config": {
+          "publicBaseUrl": "__PUBLIC_BASE_URL__",
+          "channelHashSalt": "__CHANNEL_HASH_SALT__"
+        }
+      }
+    }
+  },
+  "meta": {}
+}

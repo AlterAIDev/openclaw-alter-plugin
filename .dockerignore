@@ -1,0 +1,10 @@
+node_modules
+dist
+.git
+.github
+tests
+**/*.test.ts
+.env
+.env.*
+.claude
+*.log
