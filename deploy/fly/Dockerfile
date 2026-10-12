@@ -29,6 +29,9 @@ RUN pnpm prune --prod
 
 # ---------- runtime ----------
 FROM node:22-bookworm-slim AS runtime
+
+# Fail a piped RUN when any stage of the pipe fails, not just the last.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 WORKDIR /app
 
 # Tools the entrypoint + ssh sessions need.
@@ -81,6 +84,7 @@ RUN find . -type f | LC_ALL=C sort | xargs -d '\n' sha256sum | sha256sum | cut -
 # Gateway config template + entrypoint.
 WORKDIR /app
 COPY deploy/fly/openclaw.json.template /app/openclaw.json.template
+COPY deploy/fly/config-reconcile.cjs /app/config-reconcile.cjs
 COPY deploy/fly/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

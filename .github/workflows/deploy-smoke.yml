@@ -1,0 +1,30 @@
+name: deploy-smoke
+
+# Builds the reference Fly image and boots it in Docker once per chat-channel
+# setup (none, Slack, Discord, restart with both) with placeholder secrets.
+# See deploy/fly/smoke-test.sh for the checks. Runs only when the deployment or
+# what the image contains changes.
+
+on:
+  pull_request:
+    paths:
+      - "deploy/**"
+      - "fly.toml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "openclaw.plugin.json"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Fly image smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          persist-credentials: false
+      - run: bash deploy/fly/smoke-test.sh

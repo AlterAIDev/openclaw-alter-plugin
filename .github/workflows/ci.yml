@@ -13,13 +13,15 @@ jobs:
     name: typecheck + test + build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          persist-credentials: false
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1  # v4.3.0
         with:
           version: 10
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
           node-version: 22
           cache: pnpm
@@ -29,12 +31,45 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
+  # Developer Certificate of Origin: every commit in a pull request must carry
+  # a Signed-off-by line with its author's email (git commit -s). See
+  # CONTRIBUTING.md and https://developercertificate.org.
+  dco:
+    name: DCO sign-off
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Every commit is signed off by its author
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          missing=0
+          for sha in $(git rev-list --no-merges "${BASE}..${HEAD}"); do
+            email="$(git log -1 --format='%ae' "${sha}" | tr '[:upper:]' '[:lower:]')"
+            if ! git log -1 --format='%(trailers:key=Signed-off-by,valueonly)' "${sha}" | tr '[:upper:]' '[:lower:]' | grep -qF "<${email}>"; then
+              echo "::error::$(git log -1 --format='%h %s (%an <%ae>)' "${sha}") has no 'Signed-off-by:' line with the author's email"
+              missing=$((missing + 1))
+            fi
+          done
+          if [ "${missing}" -gt 0 ]; then
+            echo "${missing} commit(s) need a DCO sign-off: run 'git rebase --signoff main' (or 'git commit --amend -s' for one commit), then force-push the branch."
+            exit 1
+          fi
+          echo "Every commit is signed off."
+
   secret-scan:
     name: gitleaks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       # The gitleaks binary rather than gitleaks-action: the action needs a

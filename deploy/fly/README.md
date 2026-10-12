@@ -1,8 +1,9 @@
 # Fly.io deployment runbook
 
 Deploys the OpenClaw gateway + `@alter-ai/openclaw-plugin` to Fly.io as a
-single long-running machine with a persistent volume. Slack wires up after
-the gateway is green (Phase 2 below).
+single long-running machine with a persistent volume, then connects it to
+**Slack, Discord, or both** in Phase 2. Each chat platform turns on when its
+secrets are set; nothing in the image or config has to change.
 
 Estimated time: **20-30 min** for the first deploy, ~3 min for subsequent
 `fly deploy` runs.
@@ -12,7 +13,9 @@ Estimated time: **20-30 min** for the first deploy, ~3 min for subsequent
 | File | Purpose |
 |---|---|
 | `Dockerfile` | Multi-stage build: compiles the plugin, then packages it next to a pinned openclaw release (kept in lockstep with `@openclaw/slack` — see the version pinned in the Dockerfile) in a Node 22 runtime image (with `python3`/`make`/`g++` so `@openclaw/slack`'s native deps can build at boot). |
-| `entrypoint.sh` | Container entrypoint. Seeds `/data/openclaw.json` from the template, installs the OpenAI key and the two plugins (skipped on a restart when nothing changed), then execs `openclaw gateway`. |
+| `entrypoint.sh` | Container entrypoint. Seeds `/data/openclaw.json` from the template, installs the OpenAI key, the alter plugin and the plugin for each chat platform whose secrets are set (skipped on a restart when nothing changed), then execs `openclaw gateway`. |
+| `config-reconcile.cjs` | Run by the entrypoint on every boot: syncs the agent's tool allowlist with the plugin manifest, and turns Slack/Discord on or off from their secrets. Unit-tested in `tests/deploy-config-reconcile.test.ts`. |
+| `smoke-test.sh` | Builds the image and boots it in Docker for each chat setup with placeholder secrets (see "Testing changes to this deployment"). |
 | `openclaw.json.template` | Gateway config. `__PUBLIC_BASE_URL__` and `__CHANNEL_HASH_SALT__` are substituted at container start. |
 | `../../fly.toml` | App definition (lives at the plugin root). |
 | `../../.dockerignore` | Keeps the build context lean. |
@@ -117,13 +120,18 @@ You're looking for these lines, in order:
 [entrypoint] seeding /data/openclaw.json from template (v<N>)
 [entrypoint] wiring OpenAI api_key auth profile openai:key-<hash> from OPENAI_API_KEY
 [entrypoint] registering alter plugin
-alter plugin registered (Alter-hosted sign-in flow, 29 tools + 3 memory tools)
-[entrypoint] registering @openclaw/slack@<openclaw version>
+[entrypoint] reconciling chat channels with their credentials
+[entrypoint] chat channels: slack on, discord off
+[entrypoint] registering @openclaw/slack@<openclaw version>   ← once per enabled platform
 [entrypoint] generating /data/.gateway-token       ← first boot only
 [entrypoint] starting gateway
+alter plugin registered (Alter-hosted sign-in flow, 29 tools + 3 memory tools)
 [gateway] http server listening (9 plugins: alter, browser, …, slack, …)
 [gateway] ready
 ```
+
+(Shown with Slack secrets set. With none set yet, the channels line reads
+`slack off, discord off` and no chat plugin is installed.)
 
 That is a first boot, or the first boot of a new image. A plain restart skips
 the three install steps and says so:
@@ -146,11 +154,9 @@ from step 3, or a truncated or mangled key (the SDK checks the key format at
 boot). Swapping the agent and app keys does *not* stop the load: it shows up
 as a 401 from Alter on the first call that uses them.
 
-> **Slack secrets not set yet?** The gateway still boots and the alter
-> plugin still loads — the Slack channel start will log auth errors and
-> stay down. You'll fix that in Phase 2 (the next boot picks them up).
-> Recommended: complete Phase 2 *before* your first `fly deploy` so the
-> first boot has tokens ready.
+> **No chat secrets set yet?** That's fine: the gateway boots with every chat
+> platform off, and the alter plugin still loads. Setting the secrets in
+> Phase 2 restarts the machine, and that boot turns the platform on.
 
 ### 5. Register your Fly URL with Alter Vault
 
@@ -192,17 +198,34 @@ chat channel is wired up yet.
 
 ---
 
-## Phase 2 — Wire Slack (Socket Mode)
+## Phase 2 — Connect Slack, Discord, or both
+
+Pick one platform or run both from the same gateway. Each is switched on by
+its own Fly secrets; on the next boot the entrypoint installs OpenClaw's
+plugin for it (at the gateway's exact version) and enables it in
+`/data/openclaw.json`. Remove a platform's secrets and the next boot turns it
+off. You never need to SSH into the machine or edit config for this.
+
+| Platform | Secrets | Section |
+|---|---|---|
+| Slack (Socket Mode) | `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN` | Phase 2a |
+| Discord | `DISCORD_BOT_TOKEN` | Phase 2b |
+
+Either way, each person's identity, connected accounts and approvals stay
+separate (see `../../README.md`, "Who sees and does what"), and DMs are
+private per person because the template sets `session.dmScope:
+"per-channel-peer"`.
+
+## Phase 2a — Slack (Socket Mode)
 
 Socket Mode means no public Slack webhook URL — the gateway opens an
 outbound WebSocket to Slack and waits for events. Works behind firewalls,
 no DNS surgery needed.
 
 The Slack channel block is already in `openclaw.json.template` (open DMs,
-open group policy, `/alter` slash command, `main` agent binding) — you do
-**not** need to SSH into the machine and edit `/data/openclaw.json`. All
-you do in this phase is (a) create the Slack app, (b) push two tokens as
-Fly secrets, (c) verify.
+open group policy, `/alter` slash command, `main` agent binding). All you do
+in this phase is (a) create the Slack app, (b) push two tokens as Fly
+secrets, (c) verify.
 
 ### 1. Create the Slack app
 
@@ -330,13 +353,15 @@ fly logs --app <your-app-name> | grep -iE 'slack'
 You want to see, in order:
 
 ```
+[entrypoint] chat channels: slack on, …
+[entrypoint] registering @openclaw/slack@<openclaw version>
 [gateway] http server listening (9 plugins: alter, browser, …, slack, …)
 [slack] [default] starting provider
 [slack] socket mode connected
 ```
 
-(The Slack plugin itself was installed on the first boot; a restart to pick
-up the tokens does not reinstall it.)
+(The plugin installs on the first boot with Slack secrets; later restarts
+say `@openclaw/slack <version> already installed`.)
 
 Then DM the bot in Slack with anything (e.g. `hi`). Within a second,
 new lines should appear in `fly logs`:
@@ -375,9 +400,143 @@ App Home), you must:
 Forgetting any of steps 2–4 produces the silent-bot symptom from the
 troubleshooting table above.
 
+---
+
+## Phase 2b — Discord
+
+OpenClaw connects to Discord as a bot over Discord's gateway, so like Socket
+Mode there is no public webhook. All you do here is (a) create the bot,
+(b) invite it to your team's server, (c) push one token as a Fly secret,
+(d) verify.
+
+### 1. Create the Discord application and bot
+
+1. In the [Discord Developer Portal](https://discord.com/developers/applications),
+   **New Application** → name it (for example "Alter").
+2. **Bot** in the sidebar → set the bot's **Username**.
+3. Still on **Bot**, under **Privileged Gateway Intents**, enable:
+   - **Message Content Intent** (required: without it the bot can't read
+     messages in server channels)
+   - **Server Members Intent** (recommended: needed for role- and
+     member-based allowlists if you tighten access later)
+4. **Reset Token** → copy the bot token. You only see it once.
+
+### 2. Invite the bot to your server
+
+**OAuth2** → **OAuth2 URL Generator**:
+
+- Scopes: `bot` and `applications.commands` (the second registers `/alter`
+  as a Discord slash command)
+- Bot permissions: **View Channels**, **Send Messages**, **Send Messages in
+  Threads**, **Read Message History**, **Embed Links**, **Attach Files**
+  (and **Add Reactions** if you like)
+
+Open the generated URL, choose your team's server, and **Continue**. Invite
+the bot only to servers whose members should be able to use it (see step 5).
+
+So people can DM the bot: right-click the server icon → **Privacy Settings**
+→ turn on **Direct Messages**.
+
+### 3. Push the Discord secret to Fly
+
+```sh
+fly secrets set DISCORD_BOT_TOKEN='…' --app <your-app-name>
+```
+
+The machine restarts. That boot installs `@openclaw/discord` at the
+gateway's version and adds a Discord block to `/data/openclaw.json` with the
+team defaults (step 5).
+
+### 4. Verify
+
+```sh
+fly logs --app <your-app-name> | grep -iE 'discord|chat channels'
+```
+
+You want to see:
+
+```
+[entrypoint] chat channels: …, discord on (config updated)
+[entrypoint] registering @openclaw/discord@<openclaw version>
+[gateway] http server listening (… discord …)
+```
+
+Then, in Discord:
+
+- **DM the bot** "hi". It replies; the first time you ask it to do
+  something, it sends you a sign-in link.
+- **In a server channel, @mention it** ("@Alter what's on my calendar?"). In
+  server channels it only answers when mentioned.
+- **Type `/alter`** — Discord offers it as a slash command. Replies to
+  slash commands are visible only to you, so sign-in and connect links stay
+  private even in a busy channel.
+
+### 5. Who can use it, and tightening that
+
+The Discord block the entrypoint adds mirrors the Slack defaults:
+
+```json
+"discord": { "enabled": true, "dmPolicy": "open", "allowFrom": ["*"], "groupPolicy": "open" }
+```
+
+Anyone who shares a server with the bot can DM it, and anyone in a server it
+was invited to can @mention it. Everything Alter does still requires each
+person to sign in through your identity provider, so an outsider can chat
+with the model but can't reach anyone's accounts. They do use the model,
+though, on your bill. To restrict who can talk to it at all, edit the
+`channels.discord` block in `/data/openclaw.json` (for example
+`"dmPolicy": "allowlist"` with specific user IDs in `allowFrom`, or a guild
+allowlist) following OpenClaw's
+[Discord access-control docs](https://docs.openclaw.ai/channels/discord/access-control).
+The entrypoint keeps your edits; it only flips `enabled`.
+
+### 6. Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Bot is online but ignores messages in server channels | Not @mentioned, or **Message Content Intent** is off | Mention the bot; enable the intent (step 1.3) and restart the machine |
+| Can't DM the bot | The server doesn't allow DMs from members | Server **Privacy Settings** → **Direct Messages** on |
+| `/alter` doesn't appear | Invited without the `applications.commands` scope | Re-invite with both scopes (step 2) |
+| `/alter` replies "not authorized" | OpenClaw's DM or guild policy excludes this user | Check `channels.discord` `dmPolicy` / `allowFrom` (step 5) |
+| `fly logs` shows no `registering @openclaw/discord` line | `DISCORD_BOT_TOKEN` isn't set for this app | `fly secrets list --app <your-app-name>` |
+
 End of Phase 2.
 
 ---
+
+## After a deploy: check it end to end
+
+The smoke test (next section) proves the image boots; only a real workspace
+proves the bot works. After each deploy, on each platform you run:
+
+1. DM the bot and ask for something that needs a tool ("what's on my
+   calendar today?"). Expect a sign-in link the first time, then an answer.
+2. @mention the bot in a shared channel and get a reply.
+3. `/alter connect` shows the connect menu; `/alter status` shows you signed
+   in.
+4. Ask for a write ("email me a test message"). Expect "Awaiting your
+   approval" with a Wallet link; approve; ask again; the email arrives.
+5. Have a second person ask the same calendar question in the same channel:
+   they get *their* calendar, or their own sign-in link.
+
+## Testing changes to this deployment
+
+Before deploying a change to the Dockerfile, the entrypoint, the template or
+the plugin's dependencies, run:
+
+```sh
+bash deploy/fly/smoke-test.sh
+```
+
+It builds the image and boots it in Docker four times with placeholder
+secrets: no chat platform, Slack only, Discord only, then a restart with
+both. Each boot must accept the config, install exactly the right plugins,
+load the alter plugin and start listening, and the restart must not reinstall
+anything. (The placeholder tokens make Slack and Discord log auth failures;
+that's expected.) It takes a few minutes and needs network access. CI runs it
+on every pull request that touches the deployment. The config logic it
+exercises also has fast unit tests: `pnpm test` (in
+`tests/deploy-config-reconcile.test.ts`).
 
 ## Updates
 
