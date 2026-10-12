@@ -1,6 +1,6 @@
 {
   "name": "@alter-ai/openclaw-plugin",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Multi-user identity, OAuth grants, HITL approvals, and per-user audit for OpenClaw deployments — backed by Alter Vault.",
   "license": "MIT",
   "author": "Alter AI <oss@alterauth.com>",

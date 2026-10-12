@@ -4,8 +4,9 @@
 #   1. ensures /data exists (Fly mount lands here),
 #   2. seeds /data/openclaw.json from the template if missing,
 #   3. installs the OpenAI key as an auth profile named after the key,
-#   4. installs the alter and Slack plugins, unless this image's versions are
-#      already on the volume,
+#   4. installs the alter plugin, and the Slack and/or Discord plugin for each
+#      chat channel whose credentials are set, unless this image's versions
+#      are already on the volume,
 #   5. generates/loads a persistent gateway token (--bind lan requires auth),
 #   6. execs the gateway with --bind lan --auth token so Fly's edge can reach it.
 #
@@ -123,33 +124,7 @@ fi
 # added by hand is preserved. Only writes when something actually changed, so a
 # steady-state boot is silent.
 echo "[entrypoint] reconciling tools.alsoAllow with the plugin manifest"
-node -e '
-const fs = require("fs");
-const configPath = process.argv[1];
-const manifest = require("/app/plugin/openclaw.plugin.json");
-const want = (manifest.contracts && manifest.contracts.tools) || [];
-if (want.length === 0) {
-  console.error("[entrypoint] manifest declares no tools — leaving alsoAllow alone");
-  process.exit(0);
-}
-const cfg = JSON.parse(fs.readFileSync(configPath, "utf8"));
-cfg.tools = cfg.tools || {};
-const existing = Array.isArray(cfg.tools.alsoAllow) ? cfg.tools.alsoAllow : [];
-const foreign = existing.filter((t) => typeof t === "string" && !t.startsWith("alter_"));
-const next = [...foreign, ...want];
-const same =
-  existing.length === next.length && existing.every((t, i) => t === next[i]);
-if (same) {
-  console.log("[entrypoint] tools.alsoAllow already in sync (" + want.length + " alter tools)");
-  process.exit(0);
-}
-cfg.tools.alsoAllow = next;
-fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2) + "\n");
-console.log(
-  "[entrypoint] tools.alsoAllow updated: " + want.length + " alter tools" +
-  (foreign.length ? " (+" + foreign.length + " preserved)" : "")
-);
-' "${CONFIG_PATH}" || {
+node /app/config-reconcile.cjs tools "${CONFIG_PATH}" /app/plugin/openclaw.plugin.json || {
   echo "[entrypoint] FATAL: could not reconcile tools.alsoAllow — the agent would" >&2
   echo "[entrypoint]        boot with a stale/absent tool allowlist and silently" >&2
   echo "[entrypoint]        lose access to alter tools. Refusing to start." >&2
@@ -293,31 +268,58 @@ else
   printf '%s\n' "${ALTER_PLUGIN_BUILD}" > "${ALTER_PLUGIN_MARKER}"
 fi
 
-# Install the Slack channel plugin from npm, at the gateway's own version.
+# Chat channels. Each one turns on when its credentials are set as secrets, so
+# the same image serves Slack, Discord, or both:
 #
-# @openclaw/slack is released in lockstep with openclaw. Unpinned, the install
-# resolves npm's latest, finds it incompatible with this runtime, and falls back
-# to the matching version, which costs a second registry round-trip on every
-# boot and would silently change the plugin if a newer compatible release
-# appeared. Skipped when that version is already on the volume.
+#   Slack    SLACK_BOT_TOKEN + SLACK_APP_TOKEN (Socket Mode)
+#   Discord  DISCORD_BOT_TOKEN
+#
+# Every boot, for each channel: openclaw.json gets `enabled` set to whether its
+# credentials are present (a Discord block with team defaults is added the
+# first time a Discord token appears; an operator's edits to an existing block
+# are kept), and an enabled channel's plugin is installed. The channel plugins
+# read their tokens from those env vars, so no secret is written to the config.
+#
+# The rules, and the Discord team defaults, live in config-reconcile.cjs
+# (tests/deploy-config-reconcile.test.ts covers them). Tighten Discord access
+# with dmPolicy "allowlist" / guild allowlists per the OpenClaw Discord docs.
+echo "[entrypoint] reconciling chat channels with their credentials"
+node /app/config-reconcile.cjs channels "${CONFIG_PATH}" || {
+  echo "[entrypoint] FATAL: could not reconcile chat channels in ${CONFIG_PATH}" >&2
+  exit 1
+}
+
+# Install an enabled channel's OpenClaw plugin from npm, at the gateway's own
+# version. @openclaw/<channel> is released in lockstep with openclaw. Unpinned,
+# the install resolves npm's latest, finds it incompatible with this runtime,
+# and falls back to the matching version, which costs a second registry
+# round-trip on every boot and would silently change the plugin if a newer
+# compatible release appeared. Skipped when that version is already on the
+# volume.
 OPENCLAW_VERSION="$(cat /app/openclaw-version 2>/dev/null || true)"
-SLACK_PLUGIN_SPEC="@openclaw/slack${OPENCLAW_VERSION:+@${OPENCLAW_VERSION}}"
-SLACK_PLUGIN_MARKER="${STATE_DIR}/.slack-plugin-version"
-if [ -n "${OPENCLAW_VERSION}" ] \
-  && marker_matches "${SLACK_PLUGIN_MARKER}" "${OPENCLAW_VERSION}" \
-  && [ -n "$(find "${STATE_DIR}/npm" -maxdepth 6 -path '*/node_modules/@openclaw/slack/package.json' 2>/dev/null | head -n 1)" ]; then
-  echo "[entrypoint] @openclaw/slack ${OPENCLAW_VERSION} already installed"
-else
-  echo "[entrypoint] registering ${SLACK_PLUGIN_SPEC}"
-  rm -f "${SLACK_PLUGIN_MARKER}"
-  if ! openclaw plugins install "${SLACK_PLUGIN_SPEC}" --force; then
-    echo "[entrypoint] FATAL: @openclaw/slack failed to install — gateway will boot without Slack" >&2
+install_channel_plugin() {
+  channel="$1"
+  spec="@openclaw/${channel}${OPENCLAW_VERSION:+@${OPENCLAW_VERSION}}"
+  marker="${STATE_DIR}/.${channel}-plugin-version"
+  if [ -n "${OPENCLAW_VERSION}" ] \
+    && marker_matches "${marker}" "${OPENCLAW_VERSION}" \
+    && [ -n "$(find "${STATE_DIR}/npm" -maxdepth 6 -path "*/node_modules/@openclaw/${channel}/package.json" 2>/dev/null | head -n 1)" ]; then
+    echo "[entrypoint] @openclaw/${channel} ${OPENCLAW_VERSION} already installed"
+    return 0
+  fi
+  echo "[entrypoint] registering ${spec}"
+  rm -f "${marker}"
+  if ! openclaw plugins install "${spec}" --force; then
+    echo "[entrypoint] FATAL: ${spec} failed to install — gateway would boot without ${channel}" >&2
     exit 1
   fi
   if [ -n "${OPENCLAW_VERSION}" ]; then
-    printf '%s\n' "${OPENCLAW_VERSION}" > "${SLACK_PLUGIN_MARKER}"
+    printf '%s\n' "${OPENCLAW_VERSION}" > "${marker}"
   fi
-fi
+}
+for channel in $(node /app/config-reconcile.cjs enabled-channels); do
+  install_channel_plugin "${channel}"
+done
 
 # OpenClaw refuses to start with a non-loopback bind (`lan`) unless
 # gateway auth is configured. No external user ever talks to the

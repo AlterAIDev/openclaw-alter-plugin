@@ -203,7 +203,50 @@ alter_gmail_search tool isn't loaded in this session's toolset" because, from
 its perspective, it isn't. (The reference Fly deployment does this on every
 boot, so it needs no manual step.)
 
-## Step 9 — Restart OpenClaw and smoke-test
+## Step 9 — Connect Slack or Discord
+
+The plugin works with any chat platform OpenClaw supports; Slack and Discord
+are the two the reference Fly deployment automates (set their secrets and it
+does everything below; see `deploy/fly/README.md`, Phase 2). On your own host:
+
+1. **Create the bot.** Follow `deploy/fly/README.md` Phase 2a steps 1-2
+   (Slack) or Phase 2b steps 1-2 (Discord): the app, its scopes or intents,
+   and inviting it. Those steps don't depend on Fly.
+2. **Install OpenClaw's plugin for the platform**, at your gateway's exact
+   version (they're released in lockstep; `openclaw --version` shows it):
+   ```sh
+   openclaw plugins install @openclaw/slack@<openclaw version>
+   openclaw plugins install @openclaw/discord@<openclaw version>
+   ```
+3. **Set the tokens as environment variables** on the gateway host, the same
+   way as step 7: `SLACK_BOT_TOKEN` and `SLACK_APP_TOKEN` for Slack,
+   `DISCORD_BOT_TOKEN` for Discord. Keep them out of `openclaw.json`.
+4. **Enable the platform for a team** in `openclaw.json`:
+   ```json
+   {
+     "channels": {
+       "slack": {
+         "enabled": true, "mode": "socket",
+         "dmPolicy": "open", "allowFrom": ["*"], "groupPolicy": "open",
+         "slashCommand": { "enabled": true, "name": "alter" }
+       },
+       "discord": {
+         "enabled": true,
+         "dmPolicy": "open", "allowFrom": ["*"], "groupPolicy": "open"
+       }
+     },
+     "session": { "dmScope": "per-channel-peer" }
+   }
+   ```
+   With these settings anyone in your workspace (Slack) or in a server the bot
+   was invited to (Discord) can talk to it; every Alter action still needs
+   each person's own sign-in. To restrict who can talk to it at all, use
+   OpenClaw's allowlists (`dmPolicy: "allowlist"`, guild allowlists).
+5. **Keep `session.dmScope: "per-channel-peer"`.** Without it OpenClaw puts
+   every DM into one shared conversation, so people could read each other's
+   messages back through the agent (`docs/MULTI_USER_LIMITS.md`).
+
+## Step 10 — Restart OpenClaw and smoke-test
 
 ```sh
 openclaw restart        # or however you bounce your deployment

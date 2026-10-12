@@ -120,6 +120,16 @@ pnpm typecheck             # tsc --noEmit
 Each test that touches SQLite uses `mkdtempSync` for an isolated workspace dir
 and calls `closeDatabase()` in `afterEach`.
 
+The reference deployment has two layers of tests:
+
+- `tests/deploy-config-reconcile.test.ts` (part of `pnpm test`) covers
+  `deploy/fly/config-reconcile.cjs`, the boot-time logic that syncs the tool
+  allowlist and turns Slack/Discord on from their secrets.
+- `bash deploy/fly/smoke-test.sh` builds the Fly image and boots it in Docker
+  for each chat setup (none, Slack, Discord, restart with both) with
+  placeholder secrets. Run it before changing the Dockerfile, the entrypoint,
+  the template or dependencies; CI runs it on pull requests that touch them.
+
 ## Operator runbooks
 
 | Task | Command |
