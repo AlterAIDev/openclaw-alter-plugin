@@ -50,7 +50,7 @@ async function expectReauth(h: ToolHarness, tagRegex: RegExp): Promise<string> {
 describe("reauth ladder — typed terminals", () => {
   it("1. GrantExpiredError → tag 'expired'", async () => {
     harness = makeToolHarness({ proxy: async () => { throw new GrantExpiredError("grant ttl lapsed"); } });
-    const text = await expectReauth(harness, /\(GitHub expired\. /);
+    await expectReauth(harness, /\(GitHub expired\. /);
     expect(harness.logger.info.mock.calls[0]?.[0]).toContain("GrantExpiredError");
   });
 

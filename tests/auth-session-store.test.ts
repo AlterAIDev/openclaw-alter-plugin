@@ -93,7 +93,7 @@ describe("AuthSessionStore — AEAD-at-rest", () => {
     const reader = new AuthSessionStore(tmp, otherDbKey, HMAC_SECRET);
     // Reader finds the row (same HMAC secret) but can't decrypt — `get`
     // surfaces the GCM auth failure as a thrown error.
-    expect(() => reader.get(s.sessionToken)).toThrow();
+    expect(() => reader.get(s.sessionToken)).toThrow(/unable to authenticate data/);
   });
 
   it("setStatus and delete work via the HMAC lookup", () => {

@@ -137,7 +137,7 @@ describe("IdentityStore — collision policy (closes plan C3)", () => {
         jwt: "jwt-1",
         jwtExpiresAt: Date.now() + 1000,
       }),
-    ).toThrow();
+    ).toThrow(/key must be exactly 32 bytes/);
     // After the throw, a good store should not see a half-written row.
     const good = new IdentityStore(tmp, KEY);
     expect(good.get("slack", "U_rollback")).toBeUndefined();

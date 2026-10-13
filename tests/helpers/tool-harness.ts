@@ -247,7 +247,7 @@ export function makeToolHarness(opts: ToolHarnessOptions = {}): ToolHarness {
       (async (params: Record<string, unknown>) => ({
         method: "GET",
         url: "https://api.github.com/search/issues",
-        queryParams: { q: String(params["q"] ?? "") },
+        queryParams: { q: typeof params["q"] === "string" ? params["q"] : "" },
       })),
   );
 

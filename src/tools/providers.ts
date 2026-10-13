@@ -91,6 +91,6 @@ export function matchProviderId(input: string): ProviderId | null {
   const normalized = input.toLowerCase().replace(/[^a-z0-9]/g, "");
   if (!normalized) return null;
   const direct = PROVIDER_IDS.find((id) => id.toLowerCase() === normalized);
-  if (direct) return direct as ProviderId;
+  if (direct) return direct;
   return PROVIDER_ALIASES[normalized] ?? null;
 }
