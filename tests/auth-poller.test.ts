@@ -149,6 +149,38 @@ describe("AuthPoller", () => {
     });
   });
 
+  it("treats a synchronous onCompleted throw like a rejection", async () => {
+    // onCompleted may be a plain function (the plugin's is): its throw must
+    // still reach onCompletedError and the row must still be deleted.
+    const store = newStore(tmp);
+    const s = makePending();
+    store.insert(s);
+
+    const persistErr = new Error("disk full");
+    const onCompleted = vi.fn((): void => {
+      throw persistErr;
+    });
+    const onCompletedError = vi.fn();
+
+    const app = makeApp(async () => authResult("jwt-1", {}));
+    const poller = new AuthPoller(app, store, {
+      onCompleted,
+      onCompletedError,
+    });
+    poller.start(s);
+
+    await vi.waitFor(() => expect(onCompletedError).toHaveBeenCalledTimes(1), {
+      timeout: 1000,
+    });
+    expect(onCompletedError).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionToken: s.sessionToken }),
+      persistErr,
+    );
+    await vi.waitFor(() => expect(store.get(s.sessionToken)).toBeUndefined(), {
+      timeout: 1000,
+    });
+  });
+
   it("maps a ConnectTimeoutError to expired (user never finished signing in)", async () => {
     const store = newStore(tmp);
     const s = makePending();
@@ -227,6 +259,48 @@ describe("AuthPoller", () => {
 
     poller.cancel(s.sessionToken);
     release();
+  });
+
+  it.each([
+    ["completes", () => authResult("jwt-late", { sub: "u" })],
+    ["fails", () => {
+      throw new Error("Authentication session expired");
+    }],
+  ] as const)("writes nothing after stopAll, even when the in-flight poll then %s", async (_, outcome) => {
+    const store = newStore(tmp);
+    const s = makePending();
+    store.insert(s);
+
+    let settled = false;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const app = makeApp(async () => {
+      await held;
+      try {
+        return outcome();
+      } finally {
+        settled = true;
+      }
+    });
+    const onCompleted = vi.fn();
+    const onFailed = vi.fn();
+    const onExpired = vi.fn();
+    const poller = new AuthPoller(app, store, { onCompleted, onFailed, onExpired });
+    poller.start(s);
+
+    poller.stopAll();
+    release();
+    await vi.waitFor(() => expect(settled).toBe(true), { timeout: 1000 });
+    // Let the loop's continuation run after the poll settles.
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(onCompleted).not.toHaveBeenCalled();
+    expect(onFailed).not.toHaveBeenCalled();
+    expect(onExpired).not.toHaveBeenCalled();
+    // Still pending, so the next boot's resumePending picks it up.
+    expect(store.get(s.sessionToken)?.status).toBe("pending");
   });
 
   it("resumePending starts loops only for non-expired pending rows", () => {

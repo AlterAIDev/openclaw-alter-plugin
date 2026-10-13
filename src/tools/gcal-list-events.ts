@@ -3,8 +3,8 @@ import type { ApprovalResult } from "@alter-ai/alter-sdk";
 import type { AlterToolSpec } from "./base.js";
 
 const PARAMS = Type.Object({
-  timeMin: Type.Optional(Type.String({ format: "date-time" })),
-  timeMax: Type.Optional(Type.String({ format: "date-time" })),
+  timeMin: Type.Optional(Type.String({ format: "date-time", maxLength: 64 })),
+  timeMax: Type.Optional(Type.String({ format: "date-time", maxLength: 64 })),
   maxResults: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 })),
 });
 
@@ -19,8 +19,9 @@ export const gcalListEventsSpec: AlterToolSpec<typeof PARAMS> = {
       singleEvents: true,
       orderBy: "startTime",
     };
-    if (params["timeMin"]) qp["timeMin"] = String(params["timeMin"]);
-    if (params["timeMax"]) qp["timeMax"] = String(params["timeMax"]);
+    const { timeMin, timeMax } = params;
+    if (typeof timeMin === "string" && timeMin) qp["timeMin"] = timeMin;
+    if (typeof timeMax === "string" && timeMax) qp["timeMax"] = timeMax;
     return {
       method: "GET",
       url: "https://www.googleapis.com/calendar/v3/calendars/primary/events",

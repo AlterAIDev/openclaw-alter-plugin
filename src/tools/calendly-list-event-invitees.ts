@@ -27,7 +27,8 @@ export const calendlyListEventInviteesSpec: AlterToolSpec<typeof PARAMS> = {
     const qp: Record<string, unknown> = {
       count: Number(params["count"] ?? 20),
     };
-    if (params["status"]) qp["status"] = String(params["status"]);
+    const status = params["status"];
+    if (typeof status === "string" && status) qp["status"] = status;
     return {
       method: "GET",
       url: `https://api.calendly.com/scheduled_events/${encodeURIComponent(

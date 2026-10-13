@@ -3,6 +3,37 @@
 Notable changes to `@alter-ai/openclaw-plugin`. Each version's section here
 becomes its GitHub release notes.
 
+## 0.8.0
+
+- **`pnpm dev`: run the plugin locally in seconds, with no accounts.** It
+  builds the plugin and starts a real OpenClaw gateway with it linked from
+  your checkout, state kept in `.dev/`. Unless `.env.dev` holds real Alter
+  keys, the plugin talks to `dev/fake-alter.mjs`, a local stand-in for Alter
+  whose sign-in, connect and approval links open small pages on your machine.
+  Add an OpenAI key and Slack or Discord tokens to `.env.dev` (template:
+  `.env.dev.example`) to chat with it. `pnpm dev -- --smoke` boots it, checks
+  it and stops, in a throwaway state directory.
+- **End-to-end tests** (`tests/e2e/`, `pnpm test:e2e`): the real plugin and
+  the real Alter SDK against the fake Alter over HTTP, acting as chat users
+  through sign-in, connecting and reconnecting a provider, reads,
+  approval-gated writes, revoking, the daily usage cap, several people in DMs
+  and in one shared channel, the same person on two chat platforms, and a
+  gateway restart. `docs/DEVELOPMENT.md` describes them.
+- `baseUrl`, `walletBaseUrl` and `publicBaseUrl` accept `http://` on
+  `localhost`, `127.0.0.1` and `[::1]`, for a gateway on a developer's
+  machine. Everything else still has to be `https://`, and the plugin now
+  checks the exact pattern its manifest declares.
+- In-flight sign-ins stop polling when the gateway stops and resume on the
+  next boot, so a plugin instance that is shutting down never stores a
+  sign-in after its replacement has taken over.
+- The date and attendee parameters of the Google Calendar and Calendly tools
+  now have length limits; `format` alone didn't bound them.
+- Decrypting a stored sign-in requires the full-length AES-GCM tag.
+- The reference Fly image pins its Node base image by digest, and
+  `deploy/fly/smoke-test.sh` also checks that every tool in the manifest is
+  visible to the agent and refuses callers who aren't chat users.
+- CI pins pnpm to an exact version.
+
 ## 0.7.0
 
 The plugin code is unchanged; this release is about deploying and adopting it.

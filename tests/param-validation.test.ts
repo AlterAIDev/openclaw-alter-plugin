@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
+import { calendlyListScheduledEventsSpec } from "../src/tools/calendly-list-scheduled-events.js";
+import { gcalCreateEventSpec } from "../src/tools/gcal-create-event.js";
+import { gcalListEventsSpec } from "../src/tools/gcal-list-events.js";
 
 /**
  * Direct coverage for the TypeBox validation logic that gates every tool
@@ -67,5 +70,39 @@ describe("tool param validation (TypeBox runtime gate)", () => {
     expect(first).toBeDefined();
     // instancePath is JSON-pointer style, e.g. "/subject"
     expect(first?.instancePath).toMatch(/subject/);
+  });
+});
+
+// `format` alone doesn't bound a string: TypeBox accepts a date-time with a
+// megabyte of fractional seconds, and a megabyte email. These real tool
+// schemas carry an explicit maxLength for that.
+describe("date-time and email tool params are length-bounded", () => {
+  const longDate = `2026-10-13T09:00:00.${"1".repeat(1_000_000)}Z`;
+
+  it.each([
+    ["alter_gcal_create_event", () => gcalCreateEventSpec.parameters, { summary: "Sync", startIso: longDate, endIso: "2026-10-13T10:00:00Z" }],
+    ["alter_gcal_create_event attendees", () => gcalCreateEventSpec.parameters, {
+      summary: "Sync",
+      startIso: "2026-10-13T09:00:00Z",
+      endIso: "2026-10-13T10:00:00Z",
+      attendees: [`${"a".repeat(1_000_000)}@example.com`],
+    }],
+    ["alter_gcal_list_events", () => gcalListEventsSpec.parameters, { timeMin: longDate }],
+    ["alter_calendly_list_scheduled_events", () => calendlyListScheduledEventsSpec.parameters, {
+      userUri: "https://api.calendly.com/users/u1",
+      minStartTime: longDate,
+    }],
+  ])("%s rejects an oversized value", (_, schema, params) => {
+    expect(Value.Check(schema(), params)).toBe(false);
+  });
+
+  it("still accepts ordinary values", () => {
+    expect(Value.Check(gcalCreateEventSpec.parameters, {
+      summary: "Sync",
+      startIso: "2026-10-13T09:00:00.123456+05:30",
+      endIso: "2026-10-13T10:00:00Z",
+      attendees: ["alice@example.com"],
+    })).toBe(true);
+    expect(Value.Check(gcalListEventsSpec.parameters, { timeMin: "2026-10-13T09:00:00Z" })).toBe(true);
   });
 });

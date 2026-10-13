@@ -50,7 +50,8 @@ export function open(sealed: SealedPayload, key: Buffer, aad: AeadAad): string {
   const tagOffset = sealed.ciphertext.length - TAG_BYTES;
   const enc = sealed.ciphertext.subarray(0, tagOffset);
   const tag = sealed.ciphertext.subarray(tagOffset);
-  const decipher = createDecipheriv(ALGO, key, sealed.nonce);
+  // Pin the expected tag length: without it, GCM accepts a truncated tag.
+  const decipher = createDecipheriv(ALGO, key, sealed.nonce, { authTagLength: TAG_BYTES });
   decipher.setAAD(aadBuffer(aad));
   decipher.setAuthTag(tag);
   const dec = Buffer.concat([decipher.update(enc), decipher.final()]);

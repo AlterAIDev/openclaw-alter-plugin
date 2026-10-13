@@ -252,7 +252,15 @@ export class AuthSessionStore {
 }
 
 export interface AuthPollerCallbacks {
-  onCompleted: (s: PendingAuthSession, userToken: string, userInfo: Record<string, unknown>) => Promise<void>;
+  /**
+   * May be synchronous: the poller awaits it either way, and a throw or a
+   * rejection both reach `onCompletedError`.
+   */
+  onCompleted: (
+    s: PendingAuthSession,
+    userToken: string,
+    userInfo: Record<string, unknown>,
+  ) => void | Promise<void>;
   onExpired?: (s: PendingAuthSession) => void;
   onFailed?: (s: PendingAuthSession, reason?: string) => void;
   /**
@@ -286,6 +294,15 @@ export class AuthPoller {
   cancel(sessionToken: string): void {
     const ctrl = this.active.get(sessionToken);
     if (ctrl) ctrl.abort();
+  }
+
+  /**
+   * Stop every running loop, e.g. when the gateway shuts down. A stopped loop
+   * writes nothing, whatever its poll later returns: the row stays pending
+   * for `resumePending` on the next boot.
+   */
+  stopAll(): void {
+    for (const ctrl of this.active.values()) ctrl.abort();
   }
 
   resumePending(nowMs = Date.now()): number {
@@ -333,6 +350,10 @@ export class AuthPoller {
       this.callbacks.onFailed?.(fresh, err instanceof Error ? err.message : String(err));
       return;
     }
+    // Stopped while the poll was in flight (the SDK poll can't be aborted):
+    // leave the row pending, as above. The plugin instance that resumes it
+    // persists the sign-in, not this stopped one.
+    if (signal.aborted) return;
 
     this.store.setStatus(fresh.sessionToken, "completed");
     try {

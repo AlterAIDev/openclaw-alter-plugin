@@ -5,9 +5,9 @@ import type { AlterToolSpec } from "./base.js";
 const PARAMS = Type.Object({
   summary: Type.String({ minLength: 1, maxLength: 256 }),
   description: Type.Optional(Type.String({ maxLength: 8192 })),
-  startIso: Type.String({ format: "date-time" }),
-  endIso: Type.String({ format: "date-time" }),
-  attendees: Type.Optional(Type.Array(Type.String({ format: "email" }), { maxItems: 50 })),
+  startIso: Type.String({ format: "date-time", maxLength: 64 }),
+  endIso: Type.String({ format: "date-time", maxLength: 64 }),
+  attendees: Type.Optional(Type.Array(Type.String({ format: "email", maxLength: 254 }), { maxItems: 50 })),
 });
 
 export const gcalCreateEventSpec: AlterToolSpec<typeof PARAMS> = {

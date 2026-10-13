@@ -36,6 +36,8 @@ export const linearSearchIssuesSpec: AlterToolSpec<typeof PARAMS> = {
   description: "Search the user's Linear workspace for issues by free-text query.",
   parameters: PARAMS,
   provider: "linear",
+  // Read-only: Linear's API is GraphQL over POST, and this sends a query, never a mutation.
+  hitl: false,
   async toProxyArgs(params) {
     return {
       method: "POST",

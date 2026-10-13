@@ -107,7 +107,7 @@ And from [gateway/security][ocsecurity], verbatim:
 > "By default, OpenClaw routes all DMs into the main session for cross-device
 > continuity. If multiple people can DM the bot (open DMs or a multi-person
 > allowlist), isolate DM sessions: `session.dmScope: "per-channel-peer"`"
-
+>
 > "Treat `dmPolicy="open"` and `groupPolicy="open"` as last-resort settings;
 > prefer pairing + allowlists unless you fully trust every member of the room."
 
