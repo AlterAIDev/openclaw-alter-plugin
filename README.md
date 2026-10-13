@@ -239,7 +239,7 @@ Each is implemented and unit-tested in `tests/`:
 
 Read these before pointing the plugin at real users:
 
-- **HITL is enforced as a _post_-check, not a pre-check.** The Alter SDK does
+- **HITL is enforced as a *post*-check, not a pre-check.** The Alter SDK does
   not expose a grant's `requires_approval` policy on `OAuthGrantItem`, so the
   plugin cannot block a write *before* it executes. For an `hitl: true` tool it
   verifies *after* the call that `proxyRequest` returned a `PendingApproval`; if
@@ -261,13 +261,25 @@ Read these before pointing the plugin at real users:
 Found a vulnerability? See **[SECURITY.md](./SECURITY.md)** — please don't open
 a public issue.
 
-## Build / test
+## Try it locally
 
 ```sh
 pnpm install
+pnpm dev            # a real OpenClaw gateway with this plugin, in seconds
+```
+
+No accounts needed: the plugin talks to a local stand-in for Alter whose
+sign-in, connect and approval links open pages on your machine. Add an OpenAI
+key and Slack or Discord tokens to `.env.dev` to chat with it as a user; see
+[docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md#run-it-locally).
+
+## Build / test
+
+```sh
 pnpm build          # tsc → dist/
 pnpm typecheck
-pnpm test           # vitest — unit tests covering the security primitives
+pnpm test           # unit tests, plus end-to-end tests of every user flow
+pnpm dev --smoke    # boot a real gateway with the plugin, check it, stop
 ```
 
 ## Limitations (0.x)

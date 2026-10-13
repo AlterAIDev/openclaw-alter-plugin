@@ -28,7 +28,7 @@ In all three cases, do NOT call the tool a second time. Wait for the user's next
 ## When to use
 
 - "find my Notion page about Q3 planning" → `alter_notion_search`
-- "create a page under <id> titled 'Standup notes'" → `alter_notion_create_page`
+- "create a page under `<id>` titled 'Standup notes'" → `alter_notion_create_page`
 
 ## When NOT to use
 

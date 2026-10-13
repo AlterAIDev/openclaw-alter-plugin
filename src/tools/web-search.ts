@@ -13,6 +13,8 @@ export const webSearchSpec: AlterToolSpec<typeof PARAMS> = {
     "Search the web via Tavily. Returns a small set of result {title, url, snippet} entries.",
   parameters: PARAMS,
   provider: "tavily",
+  // Read-only: Tavily's search endpoint is POST, but it only reads.
+  hitl: false,
   async toProxyArgs(params) {
     return {
       method: "POST",

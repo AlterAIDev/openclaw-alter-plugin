@@ -106,7 +106,7 @@ function makeJwtRequiredApp(raw: App): App {
       // throws "Cannot read private member #client from an object whose class
       // did not declare it" — JS #private fields are not forwardable through a
       // Proxy. This is what broke createAuthSession/pollAuthSession on 0.17.
-      const value = Reflect.get(target, prop, target);
+      const value: unknown = Reflect.get(target, prop, target);
       if (typeof value !== "function") {
         return value;
       }

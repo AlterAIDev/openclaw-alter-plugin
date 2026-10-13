@@ -8,7 +8,7 @@
 # from the plugin root.
 
 # ---------- builder ----------
-FROM node:22-bookworm-slim AS builder
+FROM node:22-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS builder
 WORKDIR /build
 
 RUN corepack enable && corepack prepare pnpm@10.20.0 --activate
@@ -28,7 +28,7 @@ RUN pnpm run build
 RUN pnpm prune --prod
 
 # ---------- runtime ----------
-FROM node:22-bookworm-slim AS runtime
+FROM node:22-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS runtime
 
 # Fail a piped RUN when any stage of the pipe fails, not just the last.
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -97,4 +97,5 @@ ENV NODE_OPTIONS=--max-old-space-size=1536
 
 EXPOSE 3000
 
+# nosemgrep: semgrep.dockerfile.security.missing-user-entrypoint.missing-user-entrypoint -- runs as root: the mounted volume is root-owned; moving to a non-root user needs an ownership step at boot
 ENTRYPOINT ["/usr/bin/tini", "--", "/entrypoint.sh"]

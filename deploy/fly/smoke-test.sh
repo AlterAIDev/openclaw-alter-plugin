@@ -3,7 +3,8 @@
 # smoke-test.sh: build the Fly image and boot it in Docker once per chat-channel
 # setup, with placeholder secrets, to check what a deploy depends on: the
 # config is accepted, the right channel plugins install, the alter plugin
-# registers, the gateway starts listening, and a restart reinstalls nothing.
+# registers, every tool is visible to the agent and refuses non-chat callers,
+# the gateway starts listening, and a restart reinstalls nothing.
 #
 #   bash deploy/fly/smoke-test.sh [--image TAG] [--keep]
 #
@@ -122,6 +123,31 @@ config_value() {
     -e 'const cfg = require("/data/openclaw.json"); console.log(JSON.stringify(eval(process.argv[1])))' "$2"
 }
 
+# tool_check <container>: through the gateway's own /tools/invoke API, inside
+# the container, check that every tool in the manifest is allowed for the agent
+# and that an Alter tool refuses a caller that isn't a chat user. Prints
+# "refuses=<bool> missing=<tools or none>".
+tool_check() {
+  docker exec "$1" node -e '
+    const fs = require("fs");
+    const token = fs.readFileSync("/data/.gateway-token", "utf8").trim();
+    const tools = require("/app/plugin/openclaw.plugin.json").contracts.tools;
+    const invoke = (tool) => fetch(`http://127.0.0.1:${process.env.OPENCLAW_GATEWAY_PORT || 3000}/tools/invoke`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ tool, args: {} }),
+    });
+    (async () => {
+      const missing = [];
+      for (const tool of tools) if ((await invoke(tool)).status === 404) missing.push(tool);
+      const body = await (await invoke("alter_github_search_issues")).json();
+      const refuses = body.ok === true && body.result.isError === true &&
+        /channel-attached chat session/.test(body.result.content[0].text);
+      console.log(`refuses=${refuses} missing=${missing.join(",") || "none"}`);
+    })().catch((e) => { console.log(`refuses=false missing=error:${e.message}`); });
+  ' 2>&1 || true
+}
+
 show_log_on_failure() {
   local before="$1" name="$2"
   if [ "${FAILS}" -gt "${before}" ]; then
@@ -151,6 +177,15 @@ expect "${RUN_ID}-none" "both channels off" 'chat channels: slack off, discord o
 expect "${RUN_ID}-none" "no Slack plugin installed" 'registering @openclaw/slack' absent
 expect "${RUN_ID}-none" "no Discord plugin installed" 'registering @openclaw/discord' absent
 expect "${RUN_ID}-none" "no entrypoint failure" '\[entrypoint\] FATAL' absent
+tools="$(tool_check "${RUN_ID}-none")"
+case "${tools}" in
+  *missing=none*) pass "every manifest tool is allowed for the agent" ;;
+  *) fail "every manifest tool is allowed for the agent (${tools})" ;;
+esac
+case "${tools}" in
+  *refuses=true*) pass "an Alter tool refuses a caller that isn't a chat user" ;;
+  *) fail "an Alter tool refuses a caller that isn't a chat user (${tools})" ;;
+esac
 show_log_on_failure "${before}" "${RUN_ID}-none"
 
 echo "==> 2. Slack secrets only"

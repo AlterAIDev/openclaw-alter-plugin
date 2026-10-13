@@ -289,15 +289,17 @@ export function registerMemoryTools(api: OpenClawPluginApi, deps: MemoryToolDeps
         "preferences or past context.",
       RECALL_PARAMS,
       (userKey, params) => {
+        // Value.Check has already passed, so `query` is a string or absent.
+        const query = typeof params["query"] === "string" ? params["query"] : undefined;
         const rows = deps.memories.search(
           userKey,
-          params["query"] as string | undefined,
+          query,
           (params["limit"] as number | undefined) ?? 20,
         );
         if (rows.length === 0) {
           return ok(
-            params["query"]
-              ? `No memories matching "${String(params["query"])}".`
+            query
+              ? `No memories matching "${query}".`
               : "Nothing remembered for this user yet.",
           );
         }

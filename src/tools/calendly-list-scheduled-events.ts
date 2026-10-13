@@ -9,8 +9,8 @@ const PARAMS = Type.Object({
     description:
       "Calendly user URI, e.g. `https://api.calendly.com/users/<uuid>`. Get this from `alter_calendly_get_current_user`.",
   }),
-  minStartTime: Type.Optional(Type.String({ format: "date-time" })),
-  maxStartTime: Type.Optional(Type.String({ format: "date-time" })),
+  minStartTime: Type.Optional(Type.String({ format: "date-time", maxLength: 64 })),
+  maxStartTime: Type.Optional(Type.String({ format: "date-time", maxLength: 64 })),
   status: Type.Optional(
     Type.Union([Type.Literal("active"), Type.Literal("canceled")]),
   ),
@@ -30,9 +30,10 @@ export const calendlyListScheduledEventsSpec: AlterToolSpec<typeof PARAMS> = {
       count: Number(params["count"] ?? 20),
       sort: "start_time:asc",
     };
-    if (params["minStartTime"]) qp["min_start_time"] = String(params["minStartTime"]);
-    if (params["maxStartTime"]) qp["max_start_time"] = String(params["maxStartTime"]);
-    if (params["status"]) qp["status"] = String(params["status"]);
+    const { minStartTime, maxStartTime, status } = params;
+    if (typeof minStartTime === "string" && minStartTime) qp["min_start_time"] = minStartTime;
+    if (typeof maxStartTime === "string" && maxStartTime) qp["max_start_time"] = maxStartTime;
+    if (typeof status === "string" && status) qp["status"] = status;
     return {
       method: "GET",
       url: "https://api.calendly.com/scheduled_events",

@@ -74,11 +74,11 @@ const definedPlugin: ReturnType<typeof definePluginEntry> = definePluginEntry({
     );
     const loginRateLimit = new AuthLoginRateLimit();
 
-    const onAuthCompleted = async (
+    const onAuthCompleted = (
       s: PendingAuthSession,
       userToken: string,
       _userInfo: Record<string, unknown>,
-    ): Promise<void> => {
+    ): void => {
       // Alter pre-verified the JWT (signature + iss + aud + exp + JWKS rotation)
       // before App.pollAuthSession returned it. We decode the payload locally
       // ONLY to extract sub + exp for our index/expiry; we do NOT make trust
@@ -147,6 +147,13 @@ const definedPlugin: ReturnType<typeof definePluginEntry> = definePluginEntry({
     if (resumed > 0) {
       api.logger.info(`[alter] resumed polling for ${resumed} pending sign-in session(s)`);
     }
+    // Stop polling when the gateway stops, so a plugin instance that is being
+    // replaced never writes a sign-in after the new one has taken over; its
+    // pending rows are resumed above on the next boot. Optional-chained so a
+    // host without lifecycle hooks still loads the plugin.
+    api.on?.("gateway_stop", () => {
+      authPoller.stopAll();
+    });
 
     registerConnectRoutes(api, {
       cfg,

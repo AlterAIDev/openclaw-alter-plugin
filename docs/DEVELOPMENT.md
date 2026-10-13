@@ -109,13 +109,80 @@ passed into the four registrars (`registerConnectRoutes`, `registerCommands`,
 10. Add a `toProxyArgs` test and a `Value.Check` validation test; run
     `pnpm typecheck && pnpm test && pnpm build`.
 
-## How to test
+## Run it locally
 
 ```sh
-pnpm test                  # vitest run
-pnpm test:watch            # interactive watch
-pnpm typecheck             # tsc --noEmit
+pnpm install
+pnpm dev                   # http://127.0.0.1:18789, ready in a few seconds
 ```
+
+`pnpm dev` (`dev/gateway.mjs`) builds the plugin and starts a real OpenClaw
+gateway, the version this repo pins, with the plugin linked from your checkout.
+Its state lives in `.dev/`; your `~/.openclaw` is never touched. To pick up a
+code change, stop it with Ctrl-C and run `pnpm dev` again. `pnpm dev -- --fresh`
+forgets every earlier sign-in and connection.
+
+With nothing configured, the plugin talks to `dev/fake-alter.mjs`, a local
+stand-in for the Alter API: its sign-in, connect and approval links open small
+pages on http://127.0.0.1:8787 where you pick a user name, allow a provider, or
+approve an action. Nothing reaches a real provider; reads return canned data.
+
+To chat with the agent, copy `.env.dev.example` to `.env.dev` and fill in:
+
+- `OPENAI_API_KEY`, the model the agent uses;
+- Slack (`SLACK_BOT_TOKEN` + `SLACK_APP_TOKEN`) or Discord (`DISCORD_BOT_TOKEN`)
+  bot tokens; [deploy/fly/README.md](../deploy/fly/README.md) shows how to
+  create the apps;
+- optionally `OPENCLAW_ALTER_AGENT_API_KEY` + `OPENCLAW_ALTER_APP_API_KEY` to
+  use a real Alter app instead of the fake (allow
+  `http://127.0.0.1:18789/alter/connect/cb` as its Connect return URL).
+
+The Control UI link `pnpm dev` prints is the operator's console. Alter tools
+refuse there by design, because there is no chat user to act for: per-user
+flows need Slack, Discord, or the end-to-end tests below.
+
+## How to test
+
+| Command | What it covers | Time |
+|---|---|---|
+| `pnpm test` | Unit tests, plus the end-to-end tests in `tests/e2e/` | ~1 s |
+| `pnpm test:e2e` | Only the end-to-end tests | <1 s |
+| `pnpm test:watch` | Interactive watch | |
+| `pnpm typecheck` | `tsc` on `src/`, then on `src/` + `tests/` | |
+| `pnpm dev --smoke` | Boots a real gateway with the plugin and the fake Alter in a throwaway state dir (it ignores `.env.dev` and leaves `.dev/` alone); checks registration, that every manifest tool is visible to the agent, that tools refuse callers who aren't chat users, and the connect callback; then stops | ~10 s |
+| `bash deploy/fly/smoke-test.sh` | Builds the Fly image and boots it for each chat setup (Docker, network) | minutes |
+
+CI runs all of these except the Docker smoke test on every pull request; the
+Docker one runs when the deployment or dependencies change.
+
+**End-to-end tests** (`tests/e2e/`) run the real plugin and the real Alter SDK
+against `dev/fake-alter.mjs` over HTTP, with no accounts. `plugin-host.ts`
+loads the plugin entry the way the gateway does and lets a test act as a chat
+user: `host.command(alice, "connect github")`, `host.callTool(alice, name,
+params)`, and HTTP to the connect callback. The fake plays the other side:
+`alter.signIn(link, "alice")`, `alter.connect(link)`, `alter.decide(link,
+"approved")`, `alter.revokeInWallet("alice", "github")`,
+`alter.revokeUserTokens("alice")`, and `alter.calls` records every request the
+plugin proxied.
+
+The fake follows Alter where the plugin depends on it. An agent key
+(`alter_ak_…`) and an app key (`alter_rk_…`) see different grants: connecting
+creates the user's grant, which the app key lists and revokes, and the
+agent's delegation on it, a separate id, which the agent key lists and
+proxies through (the user's grant id is a 404 for the agent). Reconnecting a
+provider the user already has reuses both. Like Alter, it doesn't check that
+a proxied grant belongs to the user token sent with it; it records the
+token's user (`sub`) and the grant's (`owner`) on every call, and the
+multi-user tests assert they match.
+
+The tests cover sign-in, connecting and reconnecting a provider, reads,
+approval-gated writes (approved, still running, failed, denied), revoking in
+chat and in the wallet, Alter rejecting a token, the daily usage cap, several
+people in DMs and in one shared channel, the same person on two chat
+platforms, and a restart, including a sign-in still open across it. Add a
+test there for any change to a user-visible flow. Each assertion should be
+one the plugin can fail: check what it sent to Alter (`alter.calls`,
+`alter.requests`) or told the user, not what the fake did on its own.
 
 Each test that touches SQLite uses `mkdtempSync` for an isolated workspace dir
 and calls `closeDatabase()` in `afterEach`.

@@ -36,12 +36,16 @@ release (see `.github/workflows/release.yml`).
 
 ```sh
 pnpm install
-pnpm build       # tsc -> dist/
 pnpm typecheck
-pnpm test        # vitest — covers the security primitives
+pnpm test        # unit tests + end-to-end tests (tests/e2e), about a second
+pnpm dev         # run a real OpenClaw gateway with your checkout of the plugin
 ```
 
-Requires **Node ≥ 22** (the plugin uses the built-in `node:sqlite`).
+Requires **Node ≥ 22** (the plugin uses the built-in `node:sqlite`). Neither
+the tests nor `pnpm dev` need an Alter account: they use `dev/fake-alter.mjs`,
+a local stand-in for the Alter API. See
+[docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md#run-it-locally) for chatting with
+your local gateway from Slack or Discord.
 
 ## What lives where
 
@@ -56,7 +60,10 @@ Requires **Node ≥ 22** (the plugin uses the built-in `node:sqlite`).
   cannot. Read it before deploying into a shared channel.
 - `docs/USER_GUIDE.md` — the end-user guide. Keep it in step with any change
   to commands, approvals or what users see.
-- `tests/` — vitest unit tests for the security-sensitive primitives.
+- `tests/` — vitest unit tests for the security-sensitive primitives, and
+  `tests/e2e/`, which runs the real plugin and Alter SDK against the fake
+  Alter and acts out each user flow.
+- `dev/` — `pnpm dev` (`gateway.mjs`) and the fake Alter (`fake-alter.mjs`).
 - `deploy/` + `fly.toml` — a reference Fly.io deployment.
 - `OPERATOR_SETUP.md` — end-to-end provisioning recipe.
 
@@ -66,7 +73,7 @@ Requires **Node ≥ 22** (the plugin uses the built-in `node:sqlite`).
   `test:`, `chore:`, `perf:`, `ci:`). Pull requests are merged with
   **Rebase and merge**, so each of your commits lands on `main` as written:
   squash fixups into meaningful commits before review.
-- `pnpm typecheck && pnpm test` must pass, and every commit is signed off
+- `pnpm typecheck && pnpm test` must pass (CI also runs `pnpm dev --smoke`), and every commit is signed off
   (`git commit -s`).
 - Don't bump the version in `package.json` or edit `CHANGELOG.md`; releases
   do that.

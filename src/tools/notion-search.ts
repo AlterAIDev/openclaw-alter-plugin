@@ -13,6 +13,8 @@ export const notionSearchSpec: AlterToolSpec<typeof PARAMS> = {
     "Search the user's Notion workspace for pages and databases matching a query string.",
   parameters: PARAMS,
   provider: "notion",
+  // Read-only: Notion's search endpoint is POST, but it only reads.
+  hitl: false,
   async toProxyArgs(params) {
     return {
       method: "POST",

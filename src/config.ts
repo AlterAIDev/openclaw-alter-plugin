@@ -24,6 +24,24 @@ const DEFAULTS = {
   rateLimitOutputTokensPerDay: 50_000,
 } as const;
 
+/**
+ * What a URL setting may be: https://, or http:// on a loopback host for a
+ * gateway on a developer's machine (`pnpm dev`; the Alter SDK allows the same
+ * for its base URL). Anything another machine can reach must be https://.
+ *
+ * This is the exact `pattern` of the URL settings in openclaw.plugin.json,
+ * which OpenClaw checks before the plugin loads (a test keeps the two equal),
+ * so the plugin and the manifest accept the same strings.
+ */
+export const URL_SETTING_PATTERN =
+  "^(https://|http://(localhost|127\\.0\\.0\\.1|\\[::1\\])(:[0-9]+)?(/|$))";
+const URL_SETTING = new RegExp(URL_SETTING_PATTERN);
+
+/** Matches the pattern and parses (the pattern alone lets through e.g. port 99999). */
+function isAllowedUrl(value: string): boolean {
+  return URL_SETTING.test(value) && URL.canParse(value);
+}
+
 export function loadConfig(api: OpenClawPluginApi): AlterPluginConfig {
   const raw = (api.pluginConfig ?? {}) as Partial<AlterPluginConfig>;
 
@@ -39,8 +57,10 @@ export function loadConfig(api: OpenClawPluginApi): AlterPluginConfig {
 
   for (const key of ["publicBaseUrl", "baseUrl", "walletBaseUrl"] as const) {
     const val = raw[key] ?? (key === "baseUrl" ? DEFAULTS.baseUrl : key === "walletBaseUrl" ? DEFAULTS.walletBaseUrl : "");
-    if (val && !val.startsWith("https://")) {
-      throw new Error(`[alter] config.${key} must use https:// scheme; got: ${val}`);
+    if (val && !isAllowedUrl(val)) {
+      throw new Error(
+        `[alter] config.${key} must use https:// scheme (http:// only for localhost); got: ${val}`,
+      );
     }
   }
 

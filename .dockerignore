@@ -8,3 +8,5 @@ tests
 .env.*
 .claude
 *.log
+.dev
+dev

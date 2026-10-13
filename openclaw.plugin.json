@@ -81,22 +81,22 @@
       "baseUrl": {
         "type": "string",
         "format": "uri",
-        "pattern": "^https://",
+        "pattern": "^(https://|http://(localhost|127\\.0\\.0\\.1|\\[::1\\])(:[0-9]+)?(/|$))",
         "default": "https://backend.alterauth.com",
         "description": "Alter API base URL."
       },
       "walletBaseUrl": {
         "type": "string",
         "format": "uri",
-        "pattern": "^https://",
+        "pattern": "^(https://|http://(localhost|127\\.0\\.0\\.1|\\[::1\\])(:[0-9]+)?(/|$))",
         "default": "https://wallet.alterauth.com",
         "description": "Alter Wallet base URL \u2014 surfaced via /alter wallet."
       },
       "publicBaseUrl": {
         "type": "string",
         "format": "uri",
-        "pattern": "^https://",
-        "description": "Single public URL for the OpenClaw deployment (e.g. https://openclaw.example.com). The plugin mounts /alter/connect/cb under this. MUST be registered as the allowed Connect return URL in your Alter app."
+        "pattern": "^(https://|http://(localhost|127\\.0\\.0\\.1|\\[::1\\])(:[0-9]+)?(/|$))",
+        "description": "Single public URL for the OpenClaw deployment (e.g. https://openclaw.example.com; http:// only for localhost). The plugin mounts /alter/connect/cb under this. MUST be registered as the allowed Connect return URL in your Alter app."
       },
       "channelHashSalt": {
         "type": "string",

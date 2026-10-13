@@ -141,7 +141,7 @@ describe("the store makes the bug unrepresentable", () => {
     // node:sqlite refuses to bind `undefined`, so the query throws before it can
     // return a row. The property that matters: an un-scoped query never yields
     // Alice's record — it errors out.
-    expect(() => lock.activeFor(SESSION, noUser)).toThrow();
+    expect(() => lock.activeFor(SESSION, noUser)).toThrow(/cannot be bound to SQLite parameter/);
   });
 
   it("treats an empty appUserId as its own partition, not a wildcard", () => {

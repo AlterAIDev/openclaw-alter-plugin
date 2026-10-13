@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
 import { App } from "@alter-ai/alter-sdk";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
@@ -444,6 +443,3 @@ export function registerCli(api: OpenClawPluginApi, deps: CliDeps): void {
     ],
   });
 }
-
-// `randomBytes` is referenced for the runbook's example only; keep imports tidy.
-void randomBytes;

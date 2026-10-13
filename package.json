@@ -1,6 +1,6 @@
 {
   "name": "@alter-ai/openclaw-plugin",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Multi-user identity, OAuth grants, HITL approvals, and per-user audit for OpenClaw deployments — backed by Alter Vault.",
   "license": "MIT",
   "author": "Alter AI <oss@alterauth.com>",
@@ -39,8 +39,10 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc -p tsconfig.test.json",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "vitest run tests/e2e",
     "clean": "rm -rf dist",
-    "prepublishOnly": "pnpm run clean && pnpm run typecheck && pnpm run test && pnpm run build"
+    "prepublishOnly": "pnpm run clean && pnpm run typecheck && pnpm run test && pnpm run build",
+    "dev": "node dev/gateway.mjs"
   },
   "peerDependencies": {
     "openclaw": ">=2026.5.0"
