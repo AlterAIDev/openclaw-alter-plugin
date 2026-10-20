@@ -54,8 +54,7 @@ reporters in the release notes unless you prefer to stay anonymous.
 
 ## Security model (summary)
 
-The plugin's threat model and implemented mitigations are documented in the
-[README](./README.md#security-guarantees). In brief:
+Each mitigation below is implemented and unit-tested in `tests/`:
 
 - **Secrets are environment-only** — agent/app API keys, the HMAC secret, and
   the AES-256-GCM master DB key are read from `process.env` by name and are
@@ -69,14 +68,27 @@ The plugin's threat model and implemented mitigations are documented in the
 - **Connect state is HMAC-signed**, single-use-nonce-bound, and the callback
   verifies the new grant actually belongs to the bound `app_user` before
   caching it.
+- **Identity-collision rejection.** Re-linking with the same IdP `sub` updates
+  the stored JWT; re-linking a `(channel_kind, channel_user_id)` with a
+  *different* `sub` is rejected rather than silently re-pointing grants
+  (`tests/identity-store.test.ts`).
+- **Alter-verified sign-in.** The user's token comes from
+  `App.pollAuthSession` and is verified by Alter server-side (signature,
+  issuer, audience, expiry, key rotation). The plugin only decodes `sub` and
+  `exp` locally, and re-prompts sign-in once `exp` passes or Alter rejects it.
+- **Per-user approval lock**, keyed `(session_id, app_user_id)` and consulted
+  only after identity resolves, so in a group DM one participant never sees
+  another's wallet link (`tests/approval-lock-cross-user.test.ts`).
+- **Byte-aware tool-result truncation.** `capToolResultJson` measures UTF-8
+  bytes, caps lists, and always emits parseable JSON with a
+  `{truncated, truncatedReason, partial}` envelope.
 - **All LLM→tool input is validated at runtime** (TypeBox), with explicit
   length bounds, CRLF-injection patterns on header-bound fields, and
   `encodeURIComponent` on URL path segments.
 
 ## Known limitations (please don't report these as new findings)
 
-These are documented, intentional trade-offs for the current version — see the
-README's [Known security caveats](./README.md#known-security-caveats):
+These are documented, intentional trade-offs for the current version:
 
 - **HITL is a _post_-check, not a pre-check.** The SDK doesn't expose
   `requires_approval` on a grant, so a write on a mis-policied grant can execute
@@ -86,6 +98,11 @@ README's [Known security caveats](./README.md#known-security-caveats):
 - **Process-local state** — single-gateway-process assumption.
 - **No silent IdP token refresh** — expired JWTs re-prompt sign-in.
 - **Per-day (not per-minute) rate limiting**, incremented post-call.
+- **Some backend error text reaches the agent.** Policy-violation and
+  invalid-request messages from Alter, and an approved action's execution
+  error, are relayed to the LLM so it can answer the user accurately; this
+  assumes those messages are user-safe. Other 4xx/5xx detail goes only to the
+  gateway log.
 
 ## Notes for operators
 
